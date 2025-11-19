@@ -5,7 +5,7 @@ use once_cell::sync::Lazy;
 
 pub mod cmon_listener;
 
-#[cfg(target_os = "windows")]
+#[cfg(feature = "windows_iocp")]
 pub mod iocp_listener;
 
 
@@ -24,7 +24,7 @@ pub static GLOBAL_LISTENER: Lazy<Box<dyn FileListener + Send + Sync>> = Lazy::ne
     create_and_init_platform_listener()
 });
 
-#[cfg(target_os = "windows")]
+#[cfg(feature = "windows_iocp")]
 fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     use iocp_listener::IOCPListener;
     let listener = IOCPListener::new().expect("Failed to create IOCP listener");
@@ -33,7 +33,7 @@ fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     Box::new(listener)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(feature = "windows_iocp"))]
 fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     // 其他平台的实现
     use cmon_listener::CmonListener;
