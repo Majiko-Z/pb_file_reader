@@ -20,22 +20,23 @@ struct DispatcherCert<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static
 MsgDispatcher: 消息分发
 */
 pub type CertKeyT = i32;
+
 pub struct MsgDispatcher<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> {
-    pub dispatcher_certs: DashMap<CertKeyT, DispatcherCert<T>>,
+    dispatcher_certs: DashMap<CertKeyT, DispatcherCert<T>>,
     pub subscriber_count: Arc<AtomicI32>, // 订阅者数量只增不减
 }
 
 impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<T> {
     pub fn new() -> Self {
         MsgDispatcher {
-            subscriber_count: Arc::new(AtomicI32::new(0)),
+            subscriber_count: Arc::new(AtomicI32::new(1)),
             dispatcher_certs: DashMap::new(),
         }
     }
 
     // 获取凭证;凭证仅用于移除channel
     pub fn get_cert(&self) -> CertKeyT {
-        self.subscriber_count.fetch_add(1, Ordering::SeqCst) as CertKeyT
+        self.subscriber_count.fetch_add(1, Ordering::Relaxed) as CertKeyT
     }
 
     // 注册channel
@@ -68,6 +69,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
                     if cert.is_running.load(Ordering::Relaxed) {
                         if (cert.dispatcher_func)(&cert.verify_data, data) {  // 传递 &T 而不是 &Result<T>
                             // 将数据添加到对应cert的缓冲区中
+                            println!("insert to cert:{}",cert.cert_key);
                             dispatcher_buff.entry(cert.cert_key)
                                 .or_insert_with(Vec::new)
                                 .push(Ok(data.clone()));
@@ -83,10 +85,13 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
 
         // 批量发送并清空buffer; 减少一次mem copy
         for (key, buffer) in dispatcher_buff.drain() { // send
+            let data_len = buffer.len();
             if let Some(cert) = self.dispatcher_certs.get(&key) {
                 if cert.is_running.load(Ordering::Relaxed) {
                     if let Err(e) = cert.send_channel.send(buffer) {
                         error!("send error:{:?}", e);
+                    } else {
+                        println!("send to cert={} success, len={}",key, data_len);
                     }
                 }
             }

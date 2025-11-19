@@ -12,7 +12,7 @@ use super::{subscribe_reader::*};
 impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, CSV> {
 
     // 启动
-    fn read_file_loop(&mut self) {
+    fn read_file_loop(&self) {
         let is_running = self.is_running.clone();
         let file_path = self.file_path.clone();
         let is_increment = self.is_increment;
@@ -27,10 +27,10 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
             let mut retry_time = 0; // 重试次数
             let mut _last_read_size = 0; // 上次读取字节数
             let mut _last_read_time = 0_u64; // 上次读取时间 (避免read间隔太频繁)
-            let mut first_read = false; // 是否第一次读取
+            let mut first_read = true; // 是否第一次读取
 
             while is_running.load(Ordering::Relaxed) {
-
+                println!("csv read file loop");
                 let cur_seek_pos = seek_pos.load(Ordering::Relaxed); // 当前文件seek位置
                 let mut need_read_data = false;
                 let mut cur_read_time = 0_u64;
@@ -72,6 +72,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
                                     if retry_time >= MAX_READ_RETRY_TIME {
                                         retry_time = 0; // 清空
                                     }
+                                    println!("retry read csv file: {:?}", file_path.display());
                                     std::thread::sleep( std::time::Duration::from_millis(500));
                                     continue;
                                 }
@@ -80,8 +81,12 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
                                 seek_pos.store(new_seek_pos, Ordering::Relaxed);
                             }
                             retry_time = 0;
+                            let data_len = datas.len();
+                            println!("read data len: {}", data_len);
                             match dispatcher.dispatch(datas) { // 分发数据
-                                Ok(_) => {}
+                                Ok(_) => {
+                                    println!("dispatch success;len={}", data_len);
+                                }
                                 Err(e) => {
                                     println!("dispatch error: {:?}", e);
                                 }
@@ -102,7 +107,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
 
 
 impl<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> ReadRunner for SubsReader<T, CSV> {
-    fn run(&mut self) {
+    fn run(&self) {
         self.read_file_loop(); // 调用 CSV 版本的具体实现
     }
 }

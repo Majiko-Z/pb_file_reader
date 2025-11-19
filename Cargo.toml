@@ -12,6 +12,7 @@ crossbeam = "0.8.4"
 csv = "1.4.0"
 ctor = "0.6.1"
 dashmap = "6.1.0"
+dbase = {version="0.6.1", features = ["serde"]}
 encoding_rs = "0.8.35"
 encoding_rs_io = "0.1.7"
 ftlog = "0.2.15"
@@ -33,5 +34,5 @@ windows = { version = "0.62.2", features = [
 
 
 [lib]
-name = "file_reader"  # 库名
+name = "pb_file_reader"  # 库名
 path = "src/lib.rs"   # 库文件路径

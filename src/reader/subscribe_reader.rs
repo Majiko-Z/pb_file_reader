@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
-use serde::Deserialize;
+use serde::{Deserialize};
+use serde::de::DeserializeOwned;   
 use std::fs::File;
 use std::sync::atomic::{AtomicBool};
 use crossbeam::channel::{bounded,Receiver};
@@ -15,10 +16,10 @@ pub type CsvReader<T> = SubsReader<T, CSV>;
 pub type DbfReader<T> = SubsReader<T, DBF>;
 
 pub trait ReadRunner {
-    fn run(&mut self);
+    fn run(& self);
 }
 
-pub struct SubsReader<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static,  F: FileType> {
+pub struct SubsReader<T: DeserializeOwned + Send + Sync + Clone + 'static,  F: FileType> {
     pub file_path: PathBuf, // 文件路径
     pub is_increment: bool, // 是否增量读
     pub seek_pos:  Arc<AtomicU64>, // 文件seek位置
@@ -31,7 +32,7 @@ pub struct SubsReader<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static
 }
 
 
-impl<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static, F: FileType> SubsReader<T, F> {
+impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReader<T, F> {
     pub fn new(file_path: PathBuf, is_increment: bool, enc: EncType) -> Result<Self> {
         let notify_meta = GLOBAL_LISTENER.add_watch(file_path.clone())?;
         Ok(Self {
@@ -74,12 +75,12 @@ impl<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static, F: FileType> Su
     }
 
     // 重置文件读取位置
-    pub fn reset_seek_pos(&mut self) { // 严格同步
+    pub fn reset_seek_pos(&self) { // 严格同步
         self.seek_pos.store(0, Ordering::SeqCst)
     }
 
     // 订阅 返回一个cert和chan
-    pub fn subscribe(&mut self, verify_data: &str, dispatcher_func: fn(&str, &T) -> bool) -> (CertKeyT, Receiver<Vec<Result<T>>>)
+    pub fn subscribe(&self, verify_data: &str, dispatcher_func: fn(&str, &T) -> bool) -> (CertKeyT, Receiver<Vec<Result<T>>>)
     where
         Self: ReadRunner,
     {
@@ -97,7 +98,7 @@ impl<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static, F: FileType> Su
 
 
     // 取消订阅
-    pub fn unsubscribe(&mut self, cert_key: CertKeyT) -> anyhow::Result<()> {
+    pub fn unsubscribe(&self, cert_key: CertKeyT) -> anyhow::Result<()> {
         {
             self.msg_dispatcher.unsubscribe(cert_key);
         }

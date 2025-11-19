@@ -22,12 +22,12 @@ impl CmonListener {
         let watcher = std::sync::Arc::new(std::sync::Mutex::new(
             RecommendedWatcher::new(move |res: Result<Event, notify::Error>| {
                 if let Ok(eve) = res { // 仅监控文件大小变化
-                    println!("recv raw event={:?},path_len={}", eve, eve.paths.len());
+                    // println!("recv raw event={:?},path_len={}", eve, eve.paths.len());
                     match eve.kind {
                         EventKind::Modify(ModifyKind::Data(DataChange::Content)) |
                         EventKind::Modify(ModifyKind::Data(DataChange::Size)) => {
                             let _ = send_c.send(eve);
-                            println!("send event");
+                            // println!("send event");
                         }
                         _ => {}
                     }
@@ -94,14 +94,14 @@ impl CmonListener {
         let path_map = self.path_map.clone();
         std::thread::spawn(move || {
             while is_running.load(std::sync::atomic::Ordering::Relaxed) {
-                println!("event loop running");
+               // println!("event loop running");
                 match recv_chan.recv() {
                     Ok(event) => {
-                        println!("recv event:{:?},path_len={}", event, event.paths.len());
+                        // println!("recv event:{:?},path_len={}", event, event.paths.len());
                         match event.kind {
                             _ => { // 已经在send前过滤事件类型
                                 for path in event.paths {
-                                    println!("handle path:{:?}", path.display());
+                                //    println!("handle path:{:?}", path.display());
                                     if let Some(entries) = path_map.get(&path) {
                                         for entry in entries.iter() { // 通知所有chan
                                            let _= entry.sender.send(NotifyEventData { 
