@@ -8,7 +8,7 @@ mod test {
     #[test]
     fn test_listen() {
         println!("begin");
-        let path_str = "E:\\projects\\file_reader\\test\\data.csv";
+        let path_str = "/Users/yaohui/projects/pb_file_reader/test/data.csv";
         let mut file_path = PathBuf::new();
         file_path.push(path_str);
         match GLOBAL_LISTENER.add_watch(file_path) {

@@ -2,9 +2,13 @@ use std::path::PathBuf;
 use crate::utils::model::{NotifyMeta};
 use anyhow::Result;
 use once_cell::sync::Lazy;
+
+pub mod cmon_listener;
+
 #[cfg(target_os = "windows")]
 pub mod iocp_listener;
-use iocp_listener::IOCPListener;
+
+
 
 pub trait FileListener {
     /// 添加监听文件
@@ -22,6 +26,7 @@ pub static GLOBAL_LISTENER: Lazy<Box<dyn FileListener + Send + Sync>> = Lazy::ne
 
 #[cfg(target_os = "windows")]
 fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
+    use iocp_listener::IOCPListener;
     let listener = IOCPListener::new().expect("Failed to create IOCP listener");
     listener.init().expect("Failed to initialize IOCP listener");
     // Box::new(listener) as Box<dyn FileListener + Send + Sync>
@@ -31,7 +36,10 @@ fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
 #[cfg(not(target_os = "windows"))]
 fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     // 其他平台的实现
-    unimplemented!("Only Windows is supported currently")
+    use cmon_listener::CmonListener;
+    let listener = CmonListener::new().expect("Failed to create Cmon listener");
+    listener.init().expect("Failed to initialize Common listener");
+    Box::new(listener)
 }
 
 pub fn get_global_listener() -> &'static dyn FileListener {

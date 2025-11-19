@@ -21,11 +21,13 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
         let dispatcher = self.msg_dispatcher.clone();
 
         let recv_signal_chan = self.notify_meta.receiver.clone();
+
         std::thread::spawn(move || {
             let mut _read_success = true; // 上次read是否成功
             let mut retry_time = 0; // 重试次数
             let mut _last_read_size = 0; // 上次读取字节数
             let mut _last_read_time = 0_u64; // 上次读取时间 (避免read间隔太频繁)
+            let mut first_read = false; // 是否第一次读取
 
             while is_running.load(Ordering::Relaxed) {
 
@@ -33,7 +35,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
                 let mut need_read_data = false;
                 let mut cur_read_time = 0_u64;
 
-                if retry_time == 0 { // 首次读取/retry清空 -> 阻塞等待写入
+                if !first_read && retry_time == 0 { // 首次读取/retry清空 -> 阻塞等待写入
                     match recv_signal_chan.recv() { // 阻塞等待事件
                         Ok(event_data) => {
                             match event_data.event {
@@ -52,6 +54,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
                     }
                 } else { // 重试    
                     need_read_data = true;
+                    first_read = false; // 标记首次读取已完成
                 }
 
                 if need_read_data {
@@ -106,8 +109,8 @@ impl<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> ReadRunner for 
 
 // 从当前seek读取后续所有数据,并返回seek和数据,不改变记录的seek变量
 pub fn read_csv_data<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static>(file_path: &PathBuf, seek_pos: u64, enc_type: EncType) -> anyhow::Result<(u64, Vec<anyhow::Result<T>>, bool)> {
-    let mut ret_data : Vec<Result::<T>> = vec![];
-    let mut read_success = true;
+    let ret_data : Vec<Result::<T>> = vec![];
+    let read_success = true;
 
     let mut fd= File::open(file_path)?;
     fd.seek(SeekFrom::Start(seek_pos))?; // seek
