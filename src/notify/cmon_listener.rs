@@ -104,6 +104,7 @@ impl CmonListener {
                                 //    println!("handle path:{:?}", path.display());
                                     if let Some(entries) = path_map.get(&path) {
                                         for entry in entries.iter() { // 通知所有chan
+                                            println!("send notify event");
                                            let _= entry.sender.send(NotifyEventData { 
                                             event: NotifyEvent::WriteEvent,
                                             last_notify_time:get_coarse_timestamp_ms(),

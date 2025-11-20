@@ -45,6 +45,13 @@ pub enum EncType {
 
 pub struct CSV;
 pub struct DBF;
+
+unsafe impl Send for CSV {}
+unsafe impl Sync for CSV {}
+
+unsafe impl Send for DBF {}
+unsafe impl Sync for DBF {}
+
 pub trait FileType {
     fn file_type () -> &'static str;
 }

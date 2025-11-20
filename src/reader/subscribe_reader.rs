@@ -1,15 +1,16 @@
+use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use dashmap::DashMap;
 use serde::{Deserialize};
 use serde::de::DeserializeOwned;   
 use std::fs::File;
 use std::sync::atomic::{AtomicBool};
-use crossbeam::channel::{bounded,Receiver};
+use crossbeam::channel::{bounded,Receiver, Sender};
 use super::msg_dispatcher::{MsgDispatcher, CertKeyT};
 use crate::notify::GLOBAL_LISTENER;
 use crate::utils::model::{*};
 use anyhow::{Result, bail};
-use std::sync::Mutex;
 
 pub type CsvReader<T> = SubsReader<T, CSV>;
 
@@ -22,12 +23,14 @@ pub trait ReadRunner {
 pub struct SubsReader<T: DeserializeOwned + Send + Sync + Clone + 'static,  F: FileType> {
     pub file_path: PathBuf, // 文件路径
     pub is_increment: bool, // 是否增量读
-    pub seek_pos:  Arc<AtomicU64>, // 文件seek位置
+    pub seek_pos:  Arc<AtomicU64>, // 文件seek位置(byte_offset/record_offset)
     pub enc_type: EncType, // 编码类型
     pub fd: Option<File>, // 文件句柄
     pub msg_dispatcher:Arc<MsgDispatcher<T>>, // 消息分发器
     pub is_running: Arc<AtomicBool>, // 控制扫单线程运行
     pub notify_meta: NotifyMeta,
+    pub inner_chan: (Sender<(CertKeyT, u64)>, Receiver<(CertKeyT, u64)>), // 内部通信通道
+    register_before_pos: DashMap<CertKeyT, u64>,
     _phantom: std::marker::PhantomData<F>, // 占位防止编译出错
 }
 
@@ -44,11 +47,13 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
             msg_dispatcher: Arc::new(MsgDispatcher::new()),
             is_running: Arc::new(AtomicBool::new(false)),
             notify_meta,
+            inner_chan: bounded(4), // 第一次register时读取
+            register_before_pos: DashMap::new(),
             _phantom: std::marker::PhantomData,
         })
     }
 
-    // 判断文件是否有新数据,通过对比文件大小判断
+    /// 判断文件是否有新数据,通过对比文件大小判断
     pub fn have_new_data(&self) -> bool {
         // 除非文件不存在, 或者无read权限
          match std::fs::metadata(&self.file_path) {
@@ -63,7 +68,7 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
         }
     }
 
-    // 获取文件句柄 - 懒加载方式
+    /// 获取文件句柄 - 懒加载方式
     pub fn get_fd(&mut self) -> anyhow::Result<&mut File> {
         if self.fd.is_none() {
             let file = File::open(&self.file_path)?;
@@ -74,30 +79,34 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
         })
     }
 
-    // 重置文件读取位置
+    /// 重置文件读取位置
     pub fn reset_seek_pos(&self) { // 严格同步
         self.seek_pos.store(0, Ordering::SeqCst)
     }
 
-    // 订阅 返回一个cert和chan
+    /// 订阅 返回一个cert和chan
     pub fn subscribe(&self, verify_data: &str, dispatcher_func: fn(&str, &T) -> bool) -> (CertKeyT, Receiver<Vec<Result<T>>>)
     where
         Self: ReadRunner,
     {
         self.reset_seek_pos(); // 重置文件读取位置
         let (send_chan, recv_chan) = bounded(16);
-
         // 获取锁并调用方法
         let cert_key = self.msg_dispatcher.get_cert_and_subscribe(verify_data, dispatcher_func, send_chan);
-
+        let current_pos = self.seek_pos.load(Ordering::Relaxed); // 记录当前位置(需要弥补数据)
         if self.is_running.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
-            self.run(); // 第一次,则启动
+            self.run(); // 第一次运行,则启动扫单线程
+        }
+        self.register_before_pos.insert(cert_key, current_pos); // 存储用于后续查询
+        #[cfg(feature = "before_register_data")]
+        {
+            let _= self.inner_chan.0.send((cert_key, current_pos)); // 注册时, 尝试异步读取之前的数据
         }
         (cert_key, recv_chan)
     }
 
 
-    // 取消订阅
+    /// 取消订阅
     pub fn unsubscribe(&self, cert_key: CertKeyT) -> anyhow::Result<()> {
         {
             self.msg_dispatcher.unsubscribe(cert_key);
@@ -117,15 +126,30 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
     pub fn empty(&self) -> anyhow::Result<bool> {
         Ok(self.msg_dispatcher.no_subscriber())
     }
+    
+    /// 获取注册前的数据
+    pub fn get_register_before_data(&self, cert_key: CertKeyT) -> Result<()> {
+        if let Some(seek_pos) = self.register_before_pos.get(&cert_key) {
+            self.inner_chan.0.send((cert_key, *seek_pos))?; // 异步读取之前的数据
+        } else {
+            bail!("cert key no register")
+        }
+        Ok(())
+    }
+        /// 获取注册前的数据
+    pub fn get_all_data(&self, cert_key: CertKeyT) -> Result<()> {
+        let pos = self.seek_pos.load(Ordering::Relaxed);
+        self.inner_chan.0.send((cert_key, pos))?; // 异步读取数据
+        Ok(())
+    }
+
 
 }
 
 // 分发数据
 pub fn dispatch_data<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static>(
-    msg_dispatcher: &Arc<Mutex<MsgDispatcher<T>>>,
+    msg_dispatcher: &Arc<MsgDispatcher<T>>,
     data_list: Vec<anyhow::Result<T>>
 ) -> anyhow::Result<()> {
-    let mut dispatcher = msg_dispatcher.lock()
-        .map_err(|e| anyhow::anyhow!("Failed to acquire dispatcher lock: {}", e))?;
-    dispatcher.dispatch(data_list)
+    msg_dispatcher.dispatch(data_list)
 }

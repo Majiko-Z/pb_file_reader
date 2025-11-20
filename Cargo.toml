@@ -5,9 +5,10 @@ edition = "2024"
 authors = ["zhang_yaohui"]
 
 [features]
-default = ["common"]
+default = ["common", "before_register_data"]
 common = []
 windows_iocp = []
+before_register_data = []
 
 [dependencies]
 anyhow = "1.0.100"
