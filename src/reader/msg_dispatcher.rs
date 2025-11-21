@@ -58,7 +58,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
 
     /// 分发数据
     pub fn dispatch(&self, msgs: Vec<Result<T>>) -> anyhow::Result<()> {
-        println!("ready dispatch:len={}",msgs.len());
+        ::ftlog::info!("ready dispatch:len={}",msgs.len());
         // 使用局部的 FxHashMap 作为缓冲区
         let mut dispatcher_buff: FxHashMap<CertKeyT, Vec<Result<T>>> = FxHashMap::default();
 
@@ -70,13 +70,14 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
                         Ok(data) => {
                             if (cert.dispatcher_func)(&cert.verify_data, &data) {  // 传递 &T 而不是 &Result<T>
                                 // 将数据添加到对应cert的缓冲区中
-                                println!("insert to cert:{}",cert.cert_key);
+                                ::ftlog::trace!("data insert to cert:{}",cert.cert_key);
                                 dispatcher_buff.entry(cert.cert_key)
                                     .or_insert_with(Vec::new)
                                     .push(Ok(data.clone()));
                             }
                         },
                         Err(e) => {
+                            ::ftlog::trace!("err data insert to cert:{}",cert.cert_key);
                             // 给所有chan发送该错误消息的克隆版本
                             dispatcher_buff.entry(cert.cert_key)
                                 .or_insert_with(Vec::new)
@@ -94,9 +95,9 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
             if let Some(cert) = self.dispatcher_certs.get(&key) {
                 if cert.is_running.load(Ordering::Relaxed) {
                     if let Err(e) = cert.send_channel.send(buffer) {
-                        println!("send error:{:?}", e);
+                        ::ftlog::error!("send error:{:?}", e);
                     } else {
-                        println!("send to cert={} success, len={}",key, data_len);
+                        ::ftlog::debug!("send to cert={} success, len={}",key, data_len);
                     }
                 }
             }
@@ -109,6 +110,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
     pub fn unsubscribe(&self, cert_key_t: CertKeyT) {
         if let Some((_, cert)) = self.dispatcher_certs.remove(&cert_key_t) {
             cert.is_running.store(false, Ordering::Relaxed); // 标记不可用
+            ::ftlog::debug!("unsubscribe: {}", cert_key_t)
             // 移除操作已经在上面完成，无需再次remove
         }
         // 不需要else分支，因为DashMap的remove方法在键不存在时返回None
@@ -121,7 +123,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
 
     /// 发送给单个订阅者
     pub fn dispatch_single(&self, msgs: Vec<Result<T>>, cert_key: CertKeyT) -> anyhow::Result<()> {
-        println!("ready dispatch:len={}",msgs.len());
+        ::ftlog::info!("ready dispatch:len={}",msgs.len());
         if let Some(cert_data) = self.dispatcher_certs.get(&cert_key) {
             if cert_data.is_running.load(Ordering::Relaxed) {
                 cert_data.send_channel.send(msgs)?;

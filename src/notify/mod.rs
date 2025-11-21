@@ -29,7 +29,6 @@ fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     use iocp_listener::IOCPListener;
     let listener = IOCPListener::new().expect("Failed to create IOCP listener");
     listener.init().expect("Failed to initialize IOCP listener");
-    // Box::new(listener) as Box<dyn FileListener + Send + Sync>
     Box::new(listener)
 }
 

@@ -7,6 +7,8 @@ use notify::{
 use dashmap::DashMap;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use crate::utils::{model::{NotifyEvent, NotifyEventData, NotifyMeta, gen_uid}, timer::get_coarse_timestamp_ms};
+use ftlog;
+
 pub struct CmonListener {
     watcher: std::sync::Arc<std::sync::Mutex<RecommendedWatcher>>, // watcher自身不是线程安全的
     running: std::sync::Arc<std::sync::atomic::AtomicBool>, // 控制线程运行
@@ -16,7 +18,7 @@ pub struct CmonListener {
 
 impl CmonListener {
     pub fn new() -> Result<Self> {
-        println!("common listener init");
+        ::ftlog::info!("common listener init;");
         let (send_c, recv_c) = bounded(16);
         let send_c_clone = send_c.clone();
         let watcher = std::sync::Arc::new(std::sync::Mutex::new(
@@ -55,14 +57,13 @@ impl CmonListener {
         };
         if self.path_map.contains_key(&path) {
             // 路径已经在监控下
+            ::ftlog::info!("file {:?} already be watched; add chan", path.display());
             self.path_map.entry(path).and_modify(|v| v.push(meta.clone()));
         } else {
-            println!("add watch for {:?}", path.display());
+            ::ftlog::info!("add watch for {:?}", path.display());
             self.watcher.lock().map_err(|_| anyhow::anyhow!("Failed to acquire watcher lock"))?
                 .watch(&path, RecursiveMode::NonRecursive)?;
             self.path_map.insert(path.clone(), vec![meta.clone()]);
-            // 并且添加到实际的文件监视器中
-           
         }
         Ok(meta)
     }
@@ -81,30 +82,30 @@ impl CmonListener {
                 self.watcher.lock()
                     .map_err(|_| anyhow::anyhow!("Failed to acquire watcher lock"))?
                     .unwatch(path)?;
+                ::ftlog::info!("path:{} unwatched", path.display());
             }
         } else {
+            ::ftlog::info!("path:{} not watched;cannot remove watch", path.display());
             bail!("Path:{} not watched", path.display())
         }
         Ok(())
     }
     pub fn event_loop(&self) -> Result<()> { 
-        println!("event loop begin");
+
         let is_running = self.running.clone();
         let recv_chan = self.inner_chan.1.clone();
         let path_map = self.path_map.clone();
         std::thread::spawn(move || {
+            ::ftlog::info!("file notify loop start");
             while is_running.load(std::sync::atomic::Ordering::Relaxed) {
-               // println!("event loop running");
                 match recv_chan.recv() {
                     Ok(event) => {
-                        // println!("recv event:{:?},path_len={}", event, event.paths.len());
                         match event.kind {
                             _ => { // 已经在send前过滤事件类型
                                 for path in event.paths {
-                                //    println!("handle path:{:?}", path.display());
                                     if let Some(entries) = path_map.get(&path) {
+                                        ::ftlog::debug!("send notify event to path:{}",path.display());
                                         for entry in entries.iter() { // 通知所有chan
-                                            println!("send notify event");
                                            let _= entry.sender.send(NotifyEventData { 
                                             event: NotifyEvent::WriteEvent,
                                             last_notify_time:get_coarse_timestamp_ms(),
@@ -112,12 +113,11 @@ impl CmonListener {
                                         }
                                     }
                                 }
-
                             }
                         }
                     }
                     Err(e) => {
-                        println!("Error:{}", e);
+                        ::ftlog::error!("notify chan recv err:{}", e);
                     }
                 }
             }

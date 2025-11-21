@@ -5,7 +5,7 @@ mod test {
     use crate::reader::manager::*;
     use crate::utils::model::EncType;
     use serde::{Deserialize, Serialize};
-
+    use crate::utils::init_logger_for_test;
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct TestCsvStruct1 {
         a: i32,
@@ -23,7 +23,8 @@ mod test {
     #[test]
     fn test_single_thread_csv_manager() {
         // 测试单线程收取数据
-        let path = PathBuf::from("/Users/yaohui/projects/pb_file_reader/test/data.csv");
+        init_logger_for_test();
+        let path = PathBuf::from("/Users/yaohui/projects/pb_file_reader/test/1.csv");
         let mut reader = get_or_create_csv_reader::<TestCsvStruct1>(&path, true, EncType::UTF8);
         match reader {
             Ok(mut reader) => {
@@ -35,7 +36,7 @@ mod test {
                     cnt += 1;
                     match recv_chan.recv() {
                         Ok(data) => {
-                            println!("recv:{:?}", data);
+                            println!("recv len {:?}", data.len());
                         }
                         Err(err) => {
                             println!("err:{:?}", err);

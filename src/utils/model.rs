@@ -43,6 +43,16 @@ pub enum EncType {
     UTF8,
 }
 
+impl std::fmt::Display for EncType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EncType::GBK => write!(f, "GBK"),
+            EncType::UTF8 => write!(f, "UTF-8"),
+        }
+    }
+}
+
+
 pub struct CSV;
 pub struct DBF;
 
@@ -69,7 +79,9 @@ impl FileType for DBF {
 }
 
 pub const MAX_READ_RETRY_TIME: i32 = 5;
-pub const MIN_READ_INTERVAL: u64 = 1;
+pub const MIN_READ_INTERVAL: u64 = 5;
+
+pub const READ_FROM_HEAD_FLAG: u64 = u64::MAX; // flag标识
 
 pub const DEFAULT_INCR_POLL_INTERVAL: Duration = Duration::from_millis(256); // 256ms
 

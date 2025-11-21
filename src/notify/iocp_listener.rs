@@ -38,7 +38,7 @@ pub struct IOCPListener {
 
 impl IOCPListener {
     pub fn new() -> Result<Self> {
-        println!("begin new");
+        ::ftlog::info!("IOCPListener::new");
         let iocp_handler = match unsafe {
             CreateIoCompletionPort(
                 INVALID_HANDLE_VALUE, // 传入 INVALID_HANDLE_VALUE 来创建一个新的端口
@@ -48,14 +48,14 @@ impl IOCPListener {
             )} {
             Ok(h) => h,
             Err(e) => {
-                println!("failed create io completion port:{:?}", e);
+                ::ftlog::error!("failed create io completion port:{:?}", e);
                 bail!(e);
             }
         };
         // 内部线程通信
         let (send_c, recv_c) = bounded(16);
         Clock::update();
-        println!("INIT LISTENER SUCCESS");
+        ::ftlog::info!("INIT IOCPListener SUCCESS");
         Ok(Self {
             iocp_handler: std::sync::Arc::new(SendableHandle(iocp_handler)),
             watch_info: std::sync::Arc::new(DashMap::default()),
@@ -69,6 +69,7 @@ impl IOCPListener {
     /// 添加监控文件
     fn __add_watch(&self, f_path: PathBuf) -> Result<NotifyMeta> { 
         if !f_path.is_file() {
+            ::ftlog::error!("Not a file: {}", f_path.display());
             bail!("Not a file: {}", f_path.display());
         }
 
@@ -77,7 +78,7 @@ impl IOCPListener {
             None => bail!("Invalid path: {}", f_path.display()),
         };
         if !dir_path.is_dir() {
-            println!("Not a dir:{}", dir_path.display());
+            ::ftlog::error!("Not a dir:{}", dir_path.display());
         }
         let (send_c,recv_c) = bounded(3);
 
@@ -96,7 +97,7 @@ impl IOCPListener {
                 .encode_wide()
                 .chain(std::iter::once(0))  // 添加 null 终止符
                 .collect();
-            println!("dir_path: {:?}", dir_path);
+            ::ftlog::debug!("dir_path: {:?}", dir_path);
             // 创建目录句柄，使用异步模式(FILE_FLAG_OVERLAPPED)和目录监听标志(FILE_LIST_DIRECTORY)
             let dir_handle = unsafe {
                 CreateFileW(
@@ -116,7 +117,7 @@ impl IOCPListener {
                 )
             };
             if dir_handle.is_err() {
-                println!("CreateFileW path:{:?}; error: {:?}", dir_path, dir_handle);
+                ::ftlog::error!("CreateFileW path:{:?}; error: {:?}", dir_path, dir_handle);
             }
             let dir_handle =  dir_handle.unwrap();
 
@@ -133,7 +134,7 @@ impl IOCPListener {
             Self::start_monitoring(&self.monitor_contexts, dir_handle)?;
             self.dir_map.insert(dir_path.clone(), dir_handle);
             // 记录目录句柄与路径的映射关系，用于后续事件处理
-            println!("insert handle:{:?}",dir_handle.0 as usize);
+            ::ftlog::debug!("insert handle:{:?}",dir_handle.0 as usize);
             self.watch_info.insert(dir_handle.0 as usize, vec![notify_meta.clone()]);
         } else {
             // 如果目录已被监控，获取已存在的句柄
@@ -153,6 +154,7 @@ impl IOCPListener {
     /// 删除监控文件
     fn __remove_watch(&self, meta: &NotifyMeta) -> Result<()> {
         // 获取文件对应的目录路径
+        ::ftlog::debug!("remove watch: {}", meta.file_path.display());
         let dir_path = match meta.file_path.parent() {
             Some(path) => path.to_path_buf(),
             None => bail!("Invalid path: {}", meta.file_path.display()),
@@ -244,12 +246,12 @@ impl IOCPListener {
         let running_flag = self.running.clone(); // 克隆 AtomicBool 引用
 
         std::thread::spawn(move || {
-            println!("start event loop");
+            ::ftlog::debug!("iocp_listener start event loop");
             while running_flag.load(std::sync::atomic::Ordering::Relaxed) {
                 let mut bytes_transferred: u32 = 0;
                 let mut completion_key: usize = 0;
                 let mut overlapped: *mut OVERLAPPED = std::ptr::null_mut();
-                println!("wait for GetQueuedCompletionStatus");
+                ::ftlog::trace!("wait for GetQueuedCompletionStatus");
                 // 等待IO完成事件，设置超时以允许检查运行状态
                 let result = unsafe {
                     GetQueuedCompletionStatus(
@@ -268,11 +270,11 @@ impl IOCPListener {
 
                 // 处理完成事件
                 if result.is_ok() && bytes_transferred > 0 {
-                    println!("send");
+                    ::ftlog::trace!("send iocp event");
                     // 发给其他线程处理
                     let _ = inner_sender.send(completion_key);
                 } else {
-                    println!("err:{:?}", result);
+                    ::ftlog::error!("err:{:?}", result);
                 }
             }
         });
@@ -286,15 +288,14 @@ impl IOCPListener {
         let running_flag = self.running.clone();
         let monitor_context = self.monitor_contexts.clone();
         std::thread::spawn(move || {
-            println!("start check thread");
+            ::ftlog::info!("start check thread");
             while running_flag.load(std::sync::atomic::Ordering::Relaxed) {
                 // 阻塞接收，但设置超时以允许检查运行状态
                 match inner_receiver.recv() {
                     Ok(complete_key) => {
-                        println!("recv complete key:{}", complete_key);
+                        ::ftlog::trace!("recv complete key:{}", complete_key);
                         for entry in watch_info.iter() {
                             let key = entry.key(); // 获取 key 的引用 &K
-                            println!("Key: {}", key);
                         }
                         if let Some(mut watch_entries) = watch_info.get_mut(&complete_key) {
                             for notify_meta_data in watch_entries.iter_mut() {
@@ -305,18 +306,18 @@ impl IOCPListener {
                                         // 文件不一致,发送通知
                                         notify_meta_data.last_bytes = notify_meta_data.cur_bytes;
                                         notify_meta_data.cur_bytes = cur_size;
-                                        println!("send notify");
+                                        ::ftlog::trace!("send notify");
                                         let _ = notify_meta_data.sender.send(NotifyEventData {
                                             event: NotifyEvent::WriteEvent,
                                             last_notify_time: get_coarse_timestamp_ms(),
                                         });
                                     } else {
-                                        println!("not send notify");
+                                        ::ftlog::trace!("not send notify");
                                     }
                                 }
                             }
                         } else {
-                            println!("not found combine key from watch info");
+                            ::ftlog::trace!("not found combine key from watch info");
                         }
                         // 重新启动监控
                         let dir_handle = HANDLE(complete_key as *mut std::ffi::c_void);

@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::path::PathBuf;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 use dashmap::DashMap;
@@ -30,7 +29,8 @@ pub struct SubsReader<T: DeserializeOwned + Send + Sync + Clone + 'static,  F: F
     pub is_running: Arc<AtomicBool>, // 控制扫单线程运行
     pub notify_meta: NotifyMeta,
     pub inner_chan: (Sender<(CertKeyT, u64)>, Receiver<(CertKeyT, u64)>), // 内部通信通道
-    register_before_pos: DashMap<CertKeyT, u64>,
+    register_before_pos: DashMap<CertKeyT, u64>, // 记录具体chan注册时的文件大小
+    read_from_head: Arc<AtomicBool>, // 是否 已经文件头开始读过
     _phantom: std::marker::PhantomData<F>, // 占位防止编译出错
 }
 
@@ -38,6 +38,7 @@ pub struct SubsReader<T: DeserializeOwned + Send + Sync + Clone + 'static,  F: F
 impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReader<T, F> {
     pub fn new(file_path: PathBuf, is_increment: bool, enc: EncType) -> Result<Self> {
         let notify_meta = GLOBAL_LISTENER.add_watch(file_path.clone())?;
+        ::ftlog::info!("[INIT_READER];FILE_TYPE={},INCREMENT={},FILE_PATH={},ENC_TYPE={}", F::file_type(), is_increment, file_path.display(), enc);
         Ok(Self {
             file_path,
             is_increment,
@@ -48,34 +49,9 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
             is_running: Arc::new(AtomicBool::new(false)),
             notify_meta,
             inner_chan: bounded(4), // 第一次register时读取
+            read_from_head: Arc::new(AtomicBool::new(false)),
             register_before_pos: DashMap::new(),
             _phantom: std::marker::PhantomData,
-        })
-    }
-
-    /// 判断文件是否有新数据,通过对比文件大小判断
-    pub fn have_new_data(&self) -> bool {
-        // 除非文件不存在, 或者无read权限
-         match std::fs::metadata(&self.file_path) {
-            Ok(m) => {
-                m.len() > self.seek_pos.load(Ordering::Relaxed)  // 只在一个read线程中调用
-
-            },
-            Err(e) => {
-                // todo need log
-                false
-            }
-        }
-    }
-
-    /// 获取文件句柄 - 懒加载方式
-    pub fn get_fd(&mut self) -> anyhow::Result<&mut File> {
-        if self.fd.is_none() {
-            let file = File::open(&self.file_path)?;
-            self.fd = Some(file);
-        }
-        self.fd.as_mut().ok_or_else(|| {
-            anyhow::anyhow!("File handle is None for path: {:?}", self.file_path)
         })
     }
 
@@ -89,19 +65,35 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
     where
         Self: ReadRunner,
     {
-        self.reset_seek_pos(); // 重置文件读取位置
+        // self.reset_seek_pos(); // 无需重置位置;通过其他逻辑单独弥补
         let (send_chan, recv_chan) = bounded(16);
         // 获取锁并调用方法
-        let cert_key = self.msg_dispatcher.get_cert_and_subscribe(verify_data, dispatcher_func, send_chan);
+        let cert_key = self.msg_dispatcher.get_cert_and_subscribe(verify_data, dispatcher_func, send_chan); // 需要在获取文件seek前执行
         let current_pos = self.seek_pos.load(Ordering::Relaxed); // 记录当前位置(需要弥补数据)
         if self.is_running.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
+            ::ftlog::info!("start reader loop");
             self.run(); // 第一次运行,则启动扫单线程
         }
         self.register_before_pos.insert(cert_key, current_pos); // 存储用于后续查询
         #[cfg(feature = "before_register_data")]
-        {
-            let _= self.inner_chan.0.send((cert_key, current_pos)); // 注册时, 尝试异步读取之前的数据
+        {   // 弥补注册之前数据,使其可以增量读
+            if !self.read_from_head.load(Ordering::Relaxed) {
+                ::ftlog::info!("read from zero seek pos");
+                self.read_from_head.store(true, Ordering::Relaxed); // reader仅会从头读一次
+                let _ = self.inner_chan.0.send((cert_key, READ_FROM_HEAD_FLAG)); // 从头开始读到文件尾部
+            } else {
+                /*
+                NOTE:获取seek前, 通信chan已经插入, READ_FROM_HEAD_FLAG会将数据同步给所有chan
+                */
+                ::ftlog::info!("read from last seek pos for new register");
+                if current_pos != 0 { 
+                    let _ = self.inner_chan.0.send((cert_key, current_pos)); // 从头读到当前文件位置
+                } // 如果为0, 代表reader在处理READ_FROM_HEAD_FLAG, 会通过READ_FROM_HEAD_FLAG受到数据
+                
+            }
+            
         }
+        
         (cert_key, recv_chan)
     }
 
@@ -118,6 +110,7 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
 
         if no_subscriber { //无人订阅, 则停止扫单
             self.is_running.store(false, Ordering::SeqCst);
+            ::ftlog::info!("stop scan file");
             return Ok(());
         }
        bail!("Failed to get subscriber")
@@ -129,15 +122,18 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
     
     /// 获取注册前的数据
     pub fn get_register_before_data(&self, cert_key: CertKeyT) -> Result<()> {
+        ::ftlog::info!("{} reading register before data", cert_key);
         if let Some(seek_pos) = self.register_before_pos.get(&cert_key) {
             self.inner_chan.0.send((cert_key, *seek_pos))?; // 异步读取之前的数据
         } else {
+            ::ftlog::error!("cert key {} no register before pos", cert_key);
             bail!("cert key no register")
         }
         Ok(())
     }
-        /// 获取注册前的数据
+    /// 获取注册前的数据
     pub fn get_all_data(&self, cert_key: CertKeyT) -> Result<()> {
+        ::ftlog::info!("get all data for cert key {}", cert_key);
         let pos = self.seek_pos.load(Ordering::Relaxed);
         self.inner_chan.0.send((cert_key, pos))?; // 异步读取数据
         Ok(())

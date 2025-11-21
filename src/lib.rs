@@ -1,5 +1,3 @@
-#![feature(test)]
-
 pub mod reader;
 
 pub mod notify;

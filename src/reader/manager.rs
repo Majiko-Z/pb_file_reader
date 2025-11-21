@@ -86,12 +86,12 @@ where
             if let Some(reader) = reader_arc {
                 if reader.is::<CsvReader<T>>() {
                     let typed_arc: Arc<CsvReader<T>> = reader.clone().downcast().map_err(|_| {
-                        anyhow!("CSV reader instance type conversion failed for path: {:?}", path)
+                        anyhow!("CSV reader instance type conversion failed for path: {:?}", path.display())
                     })?;
-                    println!("return exist reader");
+                    ::ftlog::info!("{} return exist reader", path.display());
                     return Ok(typed_arc);
                 }
-                return Err(anyhow!("CSV reader instance type mismatch for path: {:?}", path));
+                return Err(anyhow!("CSV reader instance type mismatch for path: {:?}", path.display()));
             }
         }
     }
@@ -113,7 +113,7 @@ where
     } else {
         entry.1 = Some(any_arc);
     }
-    println!("create new reader");
+    ::ftlog::info!("create new reader for {}", path.display());
     Ok(reader_arc)
 }
 
@@ -144,7 +144,7 @@ where
                 if reader.is::<CsvReader<T>>() {
                     // 尝试转换为具体类型并调用 unsubscribe
                     let typed_arc: Arc<CsvReader<T>> = reader.clone().downcast().map_err(|_| {
-                        anyhow!("CSV reader instance type conversion failed for path: {:?}", path)
+                        anyhow!("CSV reader instance type conversion failed for path: {:?}", path.display())
                     })?;
                     
                     // 调用 unsubscribe 方法移除订阅
@@ -155,12 +155,12 @@ where
                     
                     return Ok(());
                 }
-                return Err(anyhow!("CSV reader instance type mismatch for path: {:?}", path));
+                return Err(anyhow!("CSV reader instance type mismatch for path: {:?}", path.display()));
             }
         }
     }
 
-    Err(anyhow!("CSV reader not found for path: {:?}", path))
+    Err(anyhow!("CSV reader not found for path: {:?}", path.display()))
 }
 
 /// 创建或者返回已有的reader
@@ -185,12 +185,12 @@ where
             if let Some(reader) = reader_arc {
                 if reader.is::<DbfReader<T>>() {
                     let typed_arc: Arc<DbfReader<T>> = reader.clone().downcast().map_err(|_| {
-                        anyhow!("DBF reader instance type conversion failed for path: {:?}", path)
+                        anyhow!("DBF reader instance type conversion failed for path: {:?}", path.display())
                     })?;
-                    println!("return exist reader");
+                    ::ftlog::info!("return exist reader:{}", path.display());
                     return Ok(typed_arc);
                 }
-                return Err(anyhow!("DBF reader instance type mismatch for path: {:?}", path));
+                return Err(anyhow!("DBF reader instance type mismatch for path: {:?}", path.display()));
             }
         }
     }
@@ -212,7 +212,7 @@ where
     } else {
         entry.1 = Some(any_arc);
     }
-    println!("create new reader");
+    ::ftlog::info!("create new reader for {}", path.display());
     Ok(reader_arc)
 }
 
@@ -244,7 +244,7 @@ where
                 if reader.is::<DbfReader<T>>() {
                     // 尝试转换为具体类型并调用 unsubscribe
                     let typed_arc: Arc<DbfReader<T>> = reader.clone().downcast().map_err(|_| {
-                        anyhow!("DBF reader instance type conversion failed for path: {:?}", path)
+                        anyhow!("DBF reader instance type conversion failed for path: {:?}", path.display())
                     })?;
                     
                     // 调用 unsubscribe 方法移除订阅
@@ -255,10 +255,10 @@ where
                     
                     return Ok(());
                 }
-                return Err(anyhow!("DBF reader instance type mismatch for path: {:?}", path));
+                return Err(anyhow!("DBF reader instance type mismatch for path: {:?}", path.display()));
             }
         }
     }
 
-    Err(anyhow!("DBF reader not found for path: {:?}", path))
+    Err(anyhow!("DBF reader not found for path: {:?}", path.display()))
 }

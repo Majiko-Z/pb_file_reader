@@ -1,10 +1,7 @@
 use std::path::PathBuf;
-
 use anyhow::bail;
-use dbase::read;
-
 use super::subscribe_reader::{ReadRunner};
-use crate::utils::model::{DBF, NotifyEvent};
+use crate::utils::model::{DBF, NotifyEvent, READ_FROM_HEAD_FLAG};
 use crate::reader::subscribe_reader::SubsReader;
 
 impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsReader<T, DBF> {
@@ -25,7 +22,7 @@ impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsR
             let mut _last_read_time = 0_u64; // 上次读取时间 (避免read间隔太频繁)
 
             let mut selector = crossbeam::channel::Select::new();
-            let notify_idx = selector.recv(&recv_read_signal_chan);
+            let notify_idx = selector.recv(&recv_notify_signal_chan);
             let read_idx = selector.recv(&recv_read_signal_chan);
 
             while is_running.load(std::sync::atomic::Ordering::Relaxed) {
@@ -34,7 +31,7 @@ impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsR
                 match select_idx.index() {
                     i if i == notify_idx => {
                         // 文件在监听之前有数据,这种情况处理在其他地方完成
-                        match recv_notify_signal_chan.recv() { // 阻塞等待事件
+                        match select_idx.recv(&recv_notify_signal_chan) { // 阻塞等待事件
                                 Ok(event_data) => {
                                     match event_data.event {
                                         NotifyEvent::ScheduleEvent | NotifyEvent::WriteEvent => {
@@ -50,29 +47,21 @@ impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsR
                                 }
                             }
 
-                        println!("ready reading file: {}", file_path.display());
-                        match dbase::Reader::from_path(&file_path) {
-                            Ok(mut reader) => {
-                                if is_increment {
-                                    // 防止后面内存指令排序到该指令前面
-                                    // 这里seek指record数量
-                                    let _= reader.seek(seek_pos.load(std::sync::atomic::Ordering::Acquire) as _);
-                                }
-
-                                let res = reader
-                                    .iter_records_as::<T>()
-                                    .map(|e| match e {
-                                        Ok(r) => Ok(r),
-                                        Err(e) => Err(anyhow::anyhow!("{:?}", e)),
-                                    })
-                                    .collect::<Vec<_>>();
-                                let length = res.len();
-                                println!("{} records read", length);
+                        ::ftlog::trace!("ready reading file: {}", file_path.display());
+                        
+                        let begin_seek = if is_increment {
+                            seek_pos.load(std::sync::atomic::Ordering::Acquire)
+                        } else {
+                            0
+                        };
+                        match read_from_seek::<T>(&file_path, begin_seek as _) {
+                            Ok(data) => {
+                                let length = data.len();
                                 if is_increment {
                                     seek_pos.fetch_add(length as _, std::sync::atomic::Ordering::Acquire);
                                 }
                                 if length > 0 {
-                                    match dispatcher.dispatch(res) {
+                                    match dispatcher.dispatch(data) {
                                         Ok(_) => {
                                             println!("send success")
                                         },
@@ -81,25 +70,59 @@ impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsR
                                         }
                                     }
                                 }
-                            },
+
+                            }
                             Err(e) => {
                                 println!("{:?}", e);
                             }
                         }
+                    
                     },
                     i if i == read_idx => {
-                        match recv_read_signal_chan.recv() { // 接受该事件
-                            Ok((cert_key, seek_pos)) => {
-                                let from_zero_data = read_to_seek::<T>(&file_path, seek_pos);
-                                if from_zero_data.is_err() {
-                                    // 读失败则不尝试重试
-                                    continue;
+                        match select_idx.recv(&recv_read_signal_chan) { // 接受该事件
+                            Ok((cert_key, _seek_pos)) => {
+                                if _seek_pos == READ_FROM_HEAD_FLAG { // 从0到文件尾部
+                                    let begin_seek = if is_increment {
+                                        seek_pos.load(std::sync::atomic::Ordering::Acquire)
+                                    } else {
+                                        0
+                                    };
+                                    match read_from_seek::<T>(&file_path, begin_seek as _) {
+                                        Ok(data) => {
+                                            let length = data.len();
+                                            if is_increment {
+                                                seek_pos.fetch_add(length as _, std::sync::atomic::Ordering::Acquire);
+                                            }
+                                            if length > 0 {
+                                                match dispatcher.dispatch(data) {
+                                                    Ok(_) => {
+                                                        ::ftlog::info!("{} read {} data success", file_path.display(), length)
+                                                    },
+                                                    Err(e) => {
+                                                        ::ftlog::error!("send data error: {:?}", e)
+                                                    }
+                                                }
+                                            }
+
+                                        }
+                                        Err(e) => {
+                                            ::ftlog::error!("{:?}", e);
+                                        }
+                                    }
+                    
+                                } else {
+                                    let from_zero_data = read_to_seek::<T>(&file_path, _seek_pos);
+                                    if from_zero_data.is_err() {
+                                        // 读失败则不尝试重试
+                                        continue;
+                                    }
+                                    let from_zero_data = from_zero_data.unwrap(); // [safe] not err
+                                    let _= dispatcher.dispatch_single(from_zero_data, cert_key);
                                 }
-                                let from_zero_data = from_zero_data.unwrap(); // [safe] not err
-                                let _= dispatcher.dispatch_single(from_zero_data, cert_key);
+
                             }
                             Err(e) => {
-                                println!("recv signal error: {:?}", e);
+                                ::ftlog::error!("recv signal error: {:?}", e);
                             }
                         }
                     }
@@ -133,6 +156,26 @@ pub fn read_to_seek<T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static 
 
             return Ok(res);
         }
+        Err(e) => {
+            bail!("{}", e)
+        }
+    }
+}
+
+fn read_from_seek<T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone>(file_path:&PathBuf, begin_seek: u64) -> anyhow::Result<Vec<anyhow::Result<T>>> {
+    match dbase::Reader::from_path(&file_path) {
+        Ok(mut reader) => {
+            let _= reader.seek(begin_seek as _);
+
+            let res = reader
+                .iter_records_as::<T>()
+                .map(|e| match e {
+                    Ok(r) => Ok(r),
+                    Err(e) => Err(anyhow::anyhow!("{:?}", e)),
+                })
+                .collect::<Vec<_>>();
+            Ok(res)
+        },
         Err(e) => {
             bail!("{}", e)
         }
