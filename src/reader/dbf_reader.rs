@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use anyhow::bail;
 use super::subscribe_reader::{ReadRunner};
-use crate::utils::model::{DBF, NotifyEvent, READ_FROM_HEAD_FLAG};
+use crate::common::model::{DBF, NotifyEvent, READ_FROM_HEAD_FLAG};
 use crate::reader::subscribe_reader::SubsReader;
 
 impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsReader<T, DBF> {

@@ -5,8 +5,8 @@ use serde::{Deserialize};
 use std::sync::atomic::Ordering;
 use anyhow::{Result};
 use encoding_rs_io::{DecodeReaderBytesBuilder};
-use crate::utils::model::{*};
-use crate::utils::timer::get_coarse_timestamp_ms;
+use crate::common::model::{*};
+use crate::common::timer::get_coarse_timestamp_ms;
 use super::{subscribe_reader::*};
 use crossbeam::channel::Select;
 

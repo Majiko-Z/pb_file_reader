@@ -4,9 +4,9 @@ mod test {
     use std::path::PathBuf;
 
     use crate::reader::manager::*;
-    use crate::utils::model::EncType;
+    use crate::common::model::EncType;
     use serde::{Deserialize, Serialize};
-    use crate::utils::init_logger_for_test;
+    use crate::common::init_logger_for_test;
     #[allow(dead_code)]
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct TestCsvStruct1 {

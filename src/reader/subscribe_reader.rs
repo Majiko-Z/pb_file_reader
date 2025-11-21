@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool};
 use crossbeam::channel::{bounded,Receiver, Sender};
 use super::msg_dispatcher::{MsgDispatcher, CertKeyT};
 use crate::notify::GLOBAL_LISTENER;
-use crate::utils::model::{*};
+use crate::common::model::{*};
 use anyhow::{Result, bail};
 
 pub type CsvReader<T> = SubsReader<T, CSV>;

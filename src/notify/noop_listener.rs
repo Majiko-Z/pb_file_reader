@@ -1,7 +1,7 @@
 use super::FileListener;
 use std::path::PathBuf;
 use anyhow::Result;
-use crate::utils::model::NotifyMeta;
+use crate::common::model::NotifyMeta;
 
 #[allow(dead_code)]
 struct NoopListener;

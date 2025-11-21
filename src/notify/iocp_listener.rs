@@ -20,8 +20,8 @@ use dashmap::{DashMap};
 use std::path::PathBuf;
 use anyhow::{bail, Result};
 use crossbeam::channel::{bounded, Sender, Receiver};
-use crate::utils::{model::{NotifyMeta, NotifyEvent, NotifyEventData, gen_uid}};
-use crate::utils::timer::get_coarse_timestamp_ms;
+use crate::common::{model::{NotifyMeta, NotifyEvent, NotifyEventData, gen_uid}};
+use crate::common::timer::get_coarse_timestamp_ms;
 use super::FileListener;
 struct MonitorContext {
     buffer: Vec<u8>,

@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use crate::utils::model::{NotifyMeta};
+use crate::common::model::{NotifyMeta};
 use anyhow::Result;
 use once_cell::sync::Lazy;
 

@@ -10,7 +10,7 @@ use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
 use super::{subscribe_reader::*};
 use crate::reader::msg_dispatcher::CertKeyT;
-use crate::utils::model::*;
+use crate::common::model::*;
 
 
 static CSV_READER_INSTANCES: OnceCell<

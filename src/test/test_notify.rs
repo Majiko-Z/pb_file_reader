@@ -2,7 +2,7 @@
 #[allow(unused_imports)]
 mod test {
     use crate::notify::GLOBAL_LISTENER;
-    use crate::utils::model::*;
+    use crate::common::model::*;
     use std::path::PathBuf;
 
     #[test]
