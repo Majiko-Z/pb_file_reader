@@ -20,7 +20,7 @@
 
 默认使用common notify跨平台
 
-1. level 2
+2. level 2
 
 文件读取线程R,阻塞,直到收取到线程L/T的通知, 并附带重试机制
 
@@ -115,8 +115,3 @@ while true { // [退出条件]
 remove_csv_reader(cert_key1, is_crement, &file_1); 
 remove_csv_reader(cert_key2, is_crement, &file_2);
 ```
-
-
-
-
-
