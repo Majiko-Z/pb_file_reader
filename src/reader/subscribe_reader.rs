@@ -77,7 +77,7 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
         self.register_before_pos.insert(cert_key, current_pos); // 存储用于后续查询
         #[cfg(feature = "before_register_data")]
         {   // 弥补注册之前数据,使其可以增量读
-            if !self.read_from_head.load(Ordering::Relaxed) {
+            if self.read_from_head.compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed).is_ok() {
                 ::ftlog::info!("read from zero seek pos");
                 self.read_from_head.store(true, Ordering::Relaxed); // reader仅会从头读一次
                 let _ = self.inner_chan.0.send((cert_key, READ_FROM_HEAD_FLAG)); // 从头开始读到文件尾部

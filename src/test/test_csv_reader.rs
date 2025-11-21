@@ -57,7 +57,8 @@ mod test {
     #[test]
     fn test_multiple_csv_manager() {
         //  开多个线程接收同一CSV的数据
-        let path_1 = PathBuf::from("/Users/yaohui/projects/pb_file_reader/test/data.csv");
+        init_logger_for_test();
+        let path_1 = PathBuf::from("/Users/yaohui/projects/pb_file_reader/test/1.csv");
         let path_1_c1 = path_1.clone();
         let path_1_c2 = path_1.clone();
 
@@ -75,7 +76,7 @@ mod test {
             while cnt <= 10 {
                 match recv_chan.recv() {
                     Ok(data) => {
-                        println!("h1:time={};data={:?};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data, data.len());
+                        println!("h1:time={};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data.len());
                         cnt += 1;
                     },
                     Err(e) => {
@@ -101,7 +102,7 @@ mod test {
             while cnt <= 10 {
                 match recv_chan.recv() {
                     Ok(data) => {
-                        println!("h2:time={};data={:?};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data, data.len());
+                        println!("h2:time={};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data.len());
                         cnt += 1;
                     },
                     Err(e) => {
@@ -126,7 +127,7 @@ mod test {
             while cnt <= 10 {
                 match recv_chan.recv() {
                     Ok(data) => {
-                        println!("h3:time={};data={:?};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data, data.len());
+                        println!("h3:time={};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data.len());
                         cnt += 1;
                     },
                     Err(e) => {

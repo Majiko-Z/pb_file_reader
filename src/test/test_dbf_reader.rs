@@ -5,7 +5,7 @@ mod test {
     use crate::reader::manager::*;
     use crate::utils::model::EncType;
     use serde::{Deserialize, Serialize};
-
+    use crate::utils::init_logger_for_test;
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct TestDbfStruct1 {
         #[serde(rename = "A")]
@@ -25,6 +25,7 @@ mod test {
 
     #[test]
     fn test_single_thread_dbf_manager() {
+        init_logger_for_test();
         // 测试单线程收取数据
         let path = PathBuf::from("/Users/yaohui/projects/pb_file_reader/test/data.dbf");
         let mut reader = get_or_create_dbf_reader::<TestDbfStruct1>(&path, true, EncType::UTF8);
@@ -38,7 +39,7 @@ mod test {
                     cnt += 1;
                     match recv_chan.recv() {
                         Ok(data) => {
-                            println!("recv:{:?}", data);
+                            println!("recv len={:?}", data.len());
                         }
                         Err(err) => {
                             println!("err:{:?}", err);
@@ -77,7 +78,7 @@ mod test {
             while cnt <= 10 {
                 match recv_chan.recv() {
                     Ok(data) => {
-                        println!("h1:time={};data={:?};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data, data.len());
+                        println!("h1:time={};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data.len());
                         cnt += 1;
                     },
                     Err(e) => {
@@ -103,7 +104,7 @@ mod test {
             while cnt <= 10 {
                 match recv_chan.recv() {
                     Ok(data) => {
-                        println!("h2:time={};data={:?};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data, data.len());
+                        println!("h2:time={};===>len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data.len());
                         cnt += 1;
                     },
                     Err(e) => {
@@ -128,7 +129,7 @@ mod test {
             while cnt <= 10 {
                 match recv_chan.recv() {
                     Ok(data) => {
-                        println!("h3:time={};data={:?};===> len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(), data, data.len());
+                        println!("h3:time={};===>len={}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(),data.len());
                         cnt += 1;
                     },
                     Err(e) => {
