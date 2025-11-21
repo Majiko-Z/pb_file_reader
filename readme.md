@@ -48,7 +48,7 @@
 ```rust
 // CSV 文件使用 (DBF文件使用get_or_create_dbf_reader, remove_dbf_reader)
 use pb_file_reader::reader::manager::{get_or_create_csv_reader, remove_csv_reader};
-use pb_file_reader::utils::model::{EncType, CSV};
+use pb_file_reader::common::model::{EncType, CSV};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct TestCsvStruct1 {
