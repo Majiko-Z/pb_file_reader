@@ -23,7 +23,7 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
 
         let recv_notify_signal_chan = self.notify_meta.receiver.clone();
         let recv_read_signal_chan = self.inner_chan.1.clone();
-        
+
         std::thread::spawn(move || {
             ::ftlog::info!("{} csv_reader thread start", file_path.display());
             let mut _last_read_size = 0; // 上次读取字节数
@@ -73,11 +73,15 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> SubsReader<T, 
 
                         match retry_read_from_seek::<T>(&file_path, cur_seek_pos, enc_type, MAX_READ_RETRY_TIME) {
                             Ok((new_seek_pos, datas, is_read_success)) => {
-                                if !is_read_success {
-                                    ::ftlog::info!("{} retry read error.skip;", file_path.display());
+                                if !is_read_success { // 可能存在文件删除后重新生成的情况
+                                    ::ftlog::info!("{} retry read error.", file_path.display());
+                                    #[cfg(feature = "reset_seek_when_err")] {
+                                        ::ftlog::info!("{} retry read error. reset seek pos", file_path.display());
+                                        seek_pos.store(0, Ordering::Release);
+                                    }
                                     continue;
                                 }
-                                if is_increment { // 增量读; 需要更新POS 
+                                if is_increment  && is_read_success { // 增量读; 需要更新POS 
                                     _last_read_size = new_seek_pos - cur_seek_pos;
                                     seek_pos.store(new_seek_pos, Ordering::Relaxed);
                                 }
@@ -230,6 +234,7 @@ fn read_csv_data<T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static>(fil
         }
 
         Err(e) => {
+            ::ftlog::error!("{}", e);
             Ok((new_pos, vec![], false))
         }
     }

@@ -60,9 +60,8 @@ fn init_dbf_map() -> DashMap<TypeId, FxHashMap<PathBuf, (Option<Arc<dyn Any + Se
 
 /// Gets a reference to the DBF reader global map.
 fn get_dbf_map() -> &'static DashMap<TypeId, FxHashMap<PathBuf, (Option<Arc<dyn Any + Send + Sync + 'static>>, Option<Arc<dyn Any + Send + Sync + 'static>>)>> {
-    DBF_READER_INSTANCES.get_or_init(init_csv_map)
+    DBF_READER_INSTANCES.get_or_init(init_dbf_map)
 }
-
 
 /// 创建或者返回已有的reader
 pub fn get_or_create_csv_reader<T>(path: &PathBuf, increment: bool, enc_type: EncType) -> Result<Arc<CsvReader<T>>>

@@ -5,10 +5,11 @@ edition = "2024"
 authors = ["zhang_yaohui"]
 
 [features]
-default = ["common", "before_register_data"]
-common = []
-windows_iocp = []
+default = ["common_listener", "before_register_data", "reset_seek_when_err"]
+common_listener = []
+windows_iocp_listener = []
 before_register_data = []
+reset_seek_when_err = []
 
 [dependencies]
 anyhow = "1.0.100"

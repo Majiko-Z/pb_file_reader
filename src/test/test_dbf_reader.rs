@@ -1,4 +1,5 @@
 
+#[allow(unused_imports)]
 mod test {
     use std::path::PathBuf;
 
@@ -6,6 +7,8 @@ mod test {
     use crate::utils::model::EncType;
     use serde::{Deserialize, Serialize};
     use crate::utils::init_logger_for_test;
+
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct TestDbfStruct1 {
         #[serde(rename = "A")]
@@ -15,7 +18,7 @@ mod test {
         #[serde(rename = "C")]
         c: f64,
     }
-
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct TestDbfStruct2 {
         a: i32,

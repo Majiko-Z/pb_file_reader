@@ -88,7 +88,7 @@ impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsR
                                         0
                                     };
                                     match read_from_seek::<T>(&file_path, begin_seek as _) {
-                                        Ok(data) => {
+                                        Ok(data) => { // read 成功
                                             let length = data.len();
                                             if is_increment {
                                                 seek_pos.fetch_add(length as _, std::sync::atomic::Ordering::Acquire);
@@ -107,6 +107,10 @@ impl <T: for<'de> serde::Deserialize<'de> + Send + Sync + 'static + Clone> SubsR
                                         }
                                         Err(e) => {
                                             ::ftlog::error!("{:?}", e);
+                                            #[cfg(feature = "reset_seek_when_err")] {
+                                                ::ftlog::info!("{} retry read error. reset seek pos", file_path.display());
+                                                seek_pos.store(0, std::sync::atomic::Ordering::Release);
+                                            }
                                         }
                                     }
                     

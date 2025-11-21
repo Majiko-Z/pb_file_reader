@@ -4,8 +4,8 @@ use anyhow::Result;
 use once_cell::sync::Lazy;
 
 pub mod cmon_listener;
-
-#[cfg(feature = "windows_iocp")]
+pub mod noop_listener;
+#[cfg(feature = "windows_iocp_listener")]
 pub mod iocp_listener;
 
 
@@ -24,7 +24,7 @@ pub static GLOBAL_LISTENER: Lazy<Box<dyn FileListener + Send + Sync>> = Lazy::ne
     create_and_init_platform_listener()
 });
 
-#[cfg(feature = "windows_iocp")]
+#[cfg(feature = "windows_iocp_listener")]
 fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     use iocp_listener::IOCPListener;
     let listener = IOCPListener::new().expect("Failed to create IOCP listener");
@@ -32,13 +32,18 @@ fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     Box::new(listener)
 }
 
-#[cfg(not(feature = "windows_iocp"))]
+#[cfg(feature = "common_listener")]
 fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
     // 其他平台的实现
     use cmon_listener::CmonListener;
     let listener = CmonListener::new().expect("Failed to create Cmon listener");
     listener.init().expect("Failed to initialize Common listener");
     Box::new(listener)
+}
+
+#[cfg(not(any(feature = "windows_iocp_listener", feature = "common_listener")))]
+fn create_and_init_platform_listener() -> Box<dyn FileListener + Send + Sync> {
+    Box::new(NoopListener) // 空实现, 会报错
 }
 
 pub fn get_global_listener() -> &'static dyn FileListener {

@@ -7,16 +7,16 @@
 2. 线程读取时，loop + sleep循环读取, 尝试反序列化(CPU占用过高问题)
 3. 同一PB不同账户, 对应同一扫单文件, 也会开启多个线程读取(线程数太多+CPU占用高)
 
-## features
+## 本库特点
 
 1. 通过事件驱动而非循环等待
-2. 同一文件只有一个线程扫单读, 根据反序列化信息发给不同业务线程
+2. 同一文件只有一个线程扫单读, 并可选择根据反序列化信息发给不同业务线程
 
 ## 逻辑层级
 
 1. level 1
 
-使用一个线程L监听所有注册的扫单文件变化(`[windows IOCP]`/`[linux inotif]`/`[common notify]`)
+使用一个线程L监听所有注册的扫单文件变化(`[windows IOCP]`/`[linux inotify]`/`[common notify]`)
 
 默认使用`common notify`, 跨平台
 
@@ -31,9 +31,16 @@
 ## 说明
 
 1. 线程数T与监听文件数F相关 `T = F + 1`
-2. 提供给业务mpsc::bounded接口,以便业务曾可以select同时处理多个文件
+2. 提供给业务mpsc::bounded接口, 以便业务曾可以select同时处理多个文件
 
-## 使用方法
+### features
+
+1. [common_listener], 默认启用, 使用 rust notify库监听事件变化;
+2. [windows_iocp_listener], 启用windows iocp监听, 但实际common_listener在windows平台下也会使用iocp,不建议使用;
+3. [before_register_data], 默认启用, reader注册前, 文件存在数据,也会读出这部分数据;
+4. [reset_seek_when_err], 默认启用, 读取文件时, 如果文件内容被清空或有其他错误, 将重置seek以重新读文件;  
+
+### 代码示例
 
 使用方法参考下方DEMO, 或参考[test目录](src/test)下的test_*.rs
 
@@ -62,8 +69,13 @@ let is_crement = true;
 let csv_reader_1 = get_or_create_csv_reader::<TestCsvStruct1>(&file_1, is_crement, EncType::UTF8);
 let csv_reader_2 = get_or_create_csv_reader::<TestCsvStruct2>(&file_2, is_crement, EncType::UTF8);
 if csv_reader_1.is_err() {
-    // xxx
+    // 错误处理
 }
+
+if csv_reader_2.is_err() {
+    // 错误处理
+}
+
 let reader1 = csv_reader_1.unwrap(); // [safe] not err
 let reader2 = csv_reader_2.unwrap(); // [safe] not err
 
@@ -82,7 +94,7 @@ while true { // [退出条件]
     let select_idx = selector.select(); // 阻塞等待数据
     match select_idx.index() {
         i if i == chan1_idx {
-            match select_idx.recv(&recv_chan1) {
+            match select_idx.recv(&recv_chan1) => {
                 Ok(data_list) => {
                     for data in data_list {
                         if data.is_err() {
@@ -95,7 +107,7 @@ while true { // [退出条件]
             }
         }
         i if i == chan2_idx {
-            match select_idx.recv(&recv_chan2) {
+            match select_idx.recv(&recv_chan2) => {
                 Ok(data_list) => {
                     for data in data_list {
                         if data.is_err() {
@@ -112,6 +124,6 @@ while true { // [退出条件]
     
 }
 // 不再使用reader, 需提供key,扫单路径,是否增量读参数
-remove_csv_reader(cert_key1, is_crement, &file_1); 
-remove_csv_reader(cert_key2, is_crement, &file_2);
+remove_csv_reader::<TestCsvStruct1>(cert_key1, is_crement, &file_1); 
+remove_csv_reader::<TestCsvStruct2>(cert_key2, is_crement, &file_2);
 ```

@@ -137,12 +137,15 @@ impl <T: for<'a> Deserialize<'a> + Clone + Send + Sync + 'static> MsgDispatcher<
 }
 
 
+#[allow(unused_imports)]
 mod test {
     use super::*;
     use serde_derive::{Serialize, Deserialize};
     use crossbeam::channel::{Sender, Receiver, bounded, Select};
+
+    #[allow(dead_code)]
     #[derive(Debug, Serialize, Deserialize, Clone)]
-    pub struct ReportOrderAlgo {
+    struct ReportOrderAlgo {
         pub order_id: String,
     }
     // 引入 Mutex

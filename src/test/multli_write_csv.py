@@ -6,7 +6,7 @@ import os
 向多个文件中持续写入数据
 """
 file_template = "/Users/yaohui/projects/pb_file_reader/test/{}.csv"
-sleep_secs = 0.001 # 10ms写入一份数据
+sleep_secs = 5 # x s写入一份数据
 
 def write_to_csv(file_id):
     """向指定ID的CSV文件写入数据"""
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     import threading
     
     # 定义要创建的文件数量
-    num_files = 20
+    num_files = 2
     
     threads = []
     for file_id in range(1, num_files + 1):

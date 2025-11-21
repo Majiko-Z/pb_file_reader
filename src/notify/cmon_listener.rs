@@ -7,7 +7,6 @@ use notify::{
 use dashmap::DashMap;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use crate::utils::{model::{NotifyEvent, NotifyEventData, NotifyMeta, gen_uid}, timer::get_coarse_timestamp_ms};
-use ftlog;
 
 pub struct CmonListener {
     watcher: std::sync::Arc<std::sync::Mutex<RecommendedWatcher>>, // watcher自身不是线程安全的
