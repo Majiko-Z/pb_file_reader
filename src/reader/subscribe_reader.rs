@@ -57,7 +57,7 @@ impl<T: DeserializeOwned + Send + Sync + Clone + 'static, F: FileType> SubsReade
 
     /// 重置文件读取位置
     pub fn reset_seek_pos(&self) { // 严格同步
-        self.seek_pos.store(0, Ordering::SeqCst)
+        self.seek_pos.store(0, Ordering::Release)
     }
 
     /// 订阅 返回一个cert和chan

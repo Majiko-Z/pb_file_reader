@@ -32,6 +32,7 @@
 
 1. 线程数T与监听文件数F相关 `T = F + 1`
 2. 提供给业务mpsc::bounded接口, 以便业务曾可以select同时处理多个文件
+3. 如需打印日志,需在启用`ftlog`库日志配置,参考[ftlog](https://github.com/nonconvextech/ftlog)
 
 ### features
 
