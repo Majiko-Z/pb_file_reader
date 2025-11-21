@@ -18,11 +18,11 @@
 
 使用一个线程L监听所有注册的扫单文件变化(`[windows IOCP]`/`[linux inotif]`/`[common notify]`)
 
-默认使用common notify跨平台
+默认使用`common notify`, 跨平台
 
 2. level 2
 
-文件读取线程R,阻塞,直到收取到线程L/T的通知, 并附带重试机制
+文件读取线程R,阻塞,直到收取到线程L的通知, 并附带重试机制
 
 3. level 3 (业务实现)
 
@@ -35,7 +35,7 @@
 
 ## 使用方法
 
-使用方法参考下方DEMO, 或参考src/test/test_*.rs
+使用方法参考下方DEMO, 或参考[](src/test)下的test_*.rs
 
 ```rust
 // CSV 文件使用 (DBF文件使用get_or_create_dbf_reader, remove_dbf_reader)
@@ -111,7 +111,7 @@ while true { // [退出条件]
     }
     
 }
-// 不再使用reader,需提供key,扫单路径,是否增量读参数
+// 不再使用reader, 需提供key,扫单路径,是否增量读参数
 remove_csv_reader(cert_key1, is_crement, &file_1); 
 remove_csv_reader(cert_key2, is_crement, &file_2);
 ```
