@@ -68,7 +68,7 @@ let reader1 = csv_reader_1.unwrap(); // [safe] not err
 let reader2 = csv_reader_2.unwrap(); // [safe] not err
 
 let (cert_key1, recv_chan1) = reader1.subscribe(, |cur_tradeacc, data| -> bool {
-    data.tradeacc == cur_tradeacc
+    data.tradeacc == cur_tradeacc // 这里根据结构选择过滤, 直接为true, 代表接收所有数据
 });
 
 let (cert_key2, recv_chan2) = reader2.subscribe(, |cur_tradeacc, data| -> bool {
@@ -79,7 +79,7 @@ let chan1_idx = selector.recv(&recv_chan1);
 let chan2_idx = selector.recv(&recv_chan2);
 
 while true { // [退出条件]
-    let select_idx = selector.select();
+    let select_idx = selector.select(); // 阻塞等待数据
     match select_idx.index() {
         i if i == chan1_idx {
             match select_idx.recv(&recv_chan1) {
