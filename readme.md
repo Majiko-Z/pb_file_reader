@@ -35,7 +35,7 @@
 
 ## 使用方法
 
-使用方法参考下方DEMO, 或参考[](src/test)下的test_*.rs
+使用方法参考下方DEMO, 或参考[test目录](src/test)下的test_*.rs
 
 ```rust
 // CSV 文件使用 (DBF文件使用get_or_create_dbf_reader, remove_dbf_reader)
